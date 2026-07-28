@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080">
+<title>부산 2호선 유동인구-상권 분석 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --line2: #8FC31F;
+    --line2-dark: #5f8a12;
+    --ink: #1c2a1f;
+    --sub: #5b6b5e;
+    --bg: #f7f8f4;
+    --card: #ffffff;
+    --line: #e3e7dc;
+    --warn: #e07a3f;
+    --warn-bg: #fdf1e8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family: "Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    line-height:1.55;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:0 24px 80px;}
+
+  header.hero{
+    background: linear-gradient(135deg, var(--line2-dark) 0%, var(--line2) 100%);
+    color:#fff; padding:56px 24px 40px; margin-bottom:36px;
+  }
+  header.hero .inner{max-width:1080px; margin:0 auto;}
+  .eyebrow{font-size:13px; letter-spacing:.12em; text-transform:uppercase; opacity:.85; font-weight:600;}
+  h1{font-size:30px; margin:10px 0 8px; font-weight:800; letter-spacing:-0.02em;}
+  .hero-sub{font-size:15.5px; opacity:.92; max-width:640px;}
+  .hero-stats{display:flex; gap:14px; margin-top:26px; flex-wrap:wrap;}
+  .stat-pill{background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.35); border-radius:12px; padding:12px 18px; min-width:130px;}
+  .stat-pill .num{font-size:22px; font-weight:800;}
+  .stat-pill .lbl{font-size:12px; opacity:.9; margin-top:2px;}
+
+  section{margin-bottom:44px;}
+  .sec-head{margin-bottom:16px;}
+  .sec-tag{display:inline-block; font-size:12px; font-weight:700; color:var(--line2-dark); background:#eef6dc; padding:4px 10px; border-radius:999px; margin-bottom:8px;}
+  .sec-head h2{font-size:21px; margin:0 0 6px; font-weight:800;}
+  .sec-head p{color:var(--sub); font-size:14px; margin:0; max-width:700px;}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 24px; box-shadow:0 1px 3px rgba(0,0,0,.03);}
+  .grid2{display:grid; grid-template-columns:1.3fr 1fr; gap:20px;}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+
+  .verdict{display:flex; align-items:center; gap:10px; margin-top:14px; padding:12px 16px; border-radius:10px; background:#eef6dc; font-size:14.5px; font-weight:600; color:var(--line2-dark);}
+  .verdict.mid{background:#fff6e0; color:#9a6b0a;}
+  canvas{max-width:100%;}
+  .chart-box{position:relative; width:100%; height:260px;}
+  .chart-box.tall{height:300px;}
+
+  .r-box{display:flex; flex-direction:column; justify-content:center; gap:14px;}
+  .r-box .r-value{font-size:40px; font-weight:800; color:var(--line2-dark);}
+  .r-box .r-label{font-size:13px; color:var(--sub);}
+  .method-note{font-size:12.5px; color:var(--sub); background:#f2f3ee; border-radius:8px; padding:10px 12px; margin-top:8px;}
+
+  .cluster-legend{display:flex; gap:18px; flex-wrap:wrap; margin:14px 0 6px; font-size:13px;}
+  .cluster-legend span{display:flex; align-items:center; gap:6px;}
+  .dot{width:11px; height:11px; border-radius:50%; display:inline-block;}
+  .cluster-cards{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px;}
+  .cluster-card{border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
+  .cluster-card h4{margin:0 0 6px; font-size:14.5px;}
+  .cluster-card .n{font-size:12px; color:var(--sub); margin-bottom:8px;}
+  .cluster-card .stations{font-size:12.5px; color:var(--sub); line-height:1.7;}
+
+  table{width:100%; border-collapse:collapse; font-size:13.5px;}
+  th,td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--line);}
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2){text-align:left;}
+  th{color:var(--sub); font-weight:600; font-size:12.5px;}
+  tr:hover{background:#fafbf7;}
+  .neg{color:#c0392b; font-weight:700;}
+  .pos{color:var(--line2-dark); font-weight:700;}
+
+  .limits{background:var(--warn-bg); border:1px solid #f3d4b8; border-radius:14px; padding:20px 24px;}
+  .limits h3{margin:0 0 10px; font-size:15.5px; color:var(--warn);}
+  .limits ul{margin:0; padding-left:20px; font-size:13.5px; color:#7a5231;}
+  .limits li{margin-bottom:8px;}
+
+  footer{color:var(--sub); font-size:12.5px; text-align:center; padding-top:20px; border-top:1px solid var(--line);}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="inner">
+    <div class="eyebrow">부산 도시철도 2호선 데이터 분석</div>
+    <h1>승하차 인원이 많은 역일수록, 상가도 정말 많을까?</h1>
+    <p class="hero-sub">2호선 43개 역의 승하차 인원, 상권(상가) 밀도, 오피스 수, 시간대별 이용 패턴을 분석해서 &nbsp;
+    <b>역세권 유형 분류</b>와 <b>저평가 / 과잉발달 상권</b>을 찾아봤습니다.</p>
+    <div class="hero-stats">
+      <div class="stat-pill"><div class="num">43개</div><div class="lbl">분석 대상 역</div></div>
+      <div class="stat-pill"><div class="num" id="stat-r1">-</div><div class="lbl">승하차-상가수 관련성 점수</div></div>
+      <div class="stat-pill"><div class="num" id="stat-r2">-</div><div class="lbl">출퇴근-오피스 관련성 점수</div></div>
+      <div class="stat-pill"><div class="num">3개</div><div class="lbl">역세권 유형</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- 체험존 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">👆 직접 만져보기</span>
+      <h2>슬라이더를 움직이고, 역을 골라보세요</h2>
+      <p>숫자를 바꾸면 그래프가 바로 반응해요. 부모님이 직접 조작해볼 수 있는 체험 코너입니다.</p>
+    </div>
+    <div class="card grid2">
+      <div>
+        <h4 style="margin-top:0;">🚶 가상 유동인구 시뮬레이터</h4>
+        <p style="font-size:13px; color:var(--sub); margin:0 0 12px;">"우리 동네에 하루 <b id="simLabel">-</b>명이 타고 내린다면?" 슬라이더를 움직여보세요.</p>
+        <input type="range" id="simSlider" min="1000" max="55000" step="200" value="20000" style="width:100%; accent-color:var(--line2-dark);">
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--sub); margin-top:2px;"><span>1,000명</span><span>55,000명</span></div>
+        <div style="margin-top:16px; padding:14px 16px; background:#eef6dc; border-radius:10px;">
+          <div style="font-size:13px; color:var(--sub);">이 정도 유동인구면 예상되는 상가 수</div>
+          <div style="font-size:28px; font-weight:800; color:var(--line2-dark);" id="simPredicted">-</div>
+          <div style="font-size:12.5px; color:var(--sub); margin-top:6px;" id="simCompare">-</div>
+        </div>
+      </div>
+      <div>
+        <h4 style="margin-top:0;">🔍 우리 역 찾아보기</h4>
+        <select id="stationPicker" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); font-size:14px; margin-bottom:14px;"></select>
+        <div id="stationDetail" style="font-size:13.5px; line-height:1.9;"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="chart-box"><canvas id="chartSim"></canvas></div>
+    </div>
+  </section>
+
+  <!-- 가설 1 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">가설 1</span>
+      <h2>승하차 인원이 많은 역일수록 인근 상가 수도 많을 것이다</h2>
+      <p>역별 일평균 승하차 인원과 반경 300m+500m 내 상가 수의 관계를 점 그래프(점 하나 = 역 하나)와 예상선으로 확인했습니다.</p>
+    </div>
+    <div class="card grid2">
+      <div class="chart-box tall"><canvas id="chartH1"></canvas></div>
+      <div class="r-box">
+        <div>
+          <div class="r-value" id="r1-big">-</div>
+          <div class="r-label">관련성 점수 (100점 만점, 높을수록 관계가 강해요)</div>
+        </div>
+        <div>
+          <div class="r-value" style="font-size:26px;" id="r2score-big">-</div>
+          <div class="r-label">승하차 인원만 알아도 상가 수를 이 정도는 맞힐 수 있어요</div>
+        </div>
+        <div class="verdict" id="verdict-h1">분석 중...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 가설 2 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">가설 2</span>
+      <h2>출퇴근 시간대에 몰리는 역은 오피스 지역, 아니면 주거 지역일 것이다</h2>
+      <p>평일 07-09시·18-20시 승하차 비중("출퇴근 피크비율")과 오피스/회사 수의 관계를 확인했습니다. 큰 역은 원래 오피스도 많아서 그냥 비교하면 헷갈리기 때문에, <b>승객 1,000명당 오피스 수</b>로 공평하게 다시 비교했습니다.</p>
+    </div>
+    <div class="card grid2">
+      <div class="chart-box tall"><canvas id="chartH2"></canvas></div>
+      <div class="r-box">
+        <div>
+          <div class="r-value" style="font-size:26px; color:#b0b8a8; text-decoration:line-through;" id="r2raw-big">-</div>
+          <div class="r-label">그냥 오피스 개수로만 비교 — 역 규모에 가려져서 거의 의미 없어요</div>
+        </div>
+        <div>
+          <div class="r-value" id="r2density-big">-</div>
+          <div class="r-label">승객 수 대비로 공평하게 비교한 관련성 점수</div>
+        </div>
+        <div class="verdict mid" id="verdict-h2">분석 중...</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 클러스터링 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">역세권 군집 분류</span>
+      <h2>승하차 인원 × 시간대 패턴 × 오피스 밀도로 3가지 유형 찾기</h2>
+      <p>컴퓨터가 승하차 인원·시간대 패턴·오피스 수가 비슷한 역끼리 자동으로 3개 그룹을 찾아줬습니다. 각 점은 하나의 역이고, 색깔이 그룹입니다.</p>
+    </div>
+    <div class="card">
+      <div class="cluster-legend">
+        <span><span class="dot" style="background:#8FC31F"></span>핵심상업·관광형</span>
+        <span><span class="dot" style="background:#e07a3f"></span>출퇴근-오피스형</span>
+        <span><span class="dot" style="background:#7a8ea8"></span>주거형</span>
+      </div>
+      <div class="chart-box"><canvas id="chartCluster"></canvas></div>
+      <div class="cluster-cards" id="clusterCards"></div>
+    </div>
+  </section>
+
+  <!-- 저평가/과잉 상권 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">저평가 역세권 vs 과잉발달 상권</span>
+      <h2>유동인구만큼 상가가 발달했을까?</h2>
+      <p>"승하차 인원 → 예상 상가 수" 예상선을 기준으로, 실제 상가 수가 예상보다 훨씬 <b>적은 역(저평가)</b>과 훨씬 <b>많은 역(과잉발달 후보)</b>을 뽑았습니다.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h4 style="margin-top:0;">유동인구 대비 상가 부족 TOP 8 <span style="color:var(--sub); font-weight:400;">(저평가 역세권 후보)</span></h4>
+        <table id="tableUnder"><thead><tr><th>역명</th><th>일평균승하차</th><th>실제 상가수</th><th>예측 상가수</th><th>차이</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h4 style="margin-top:0;">유동인구 대비 상가 과다 TOP 8 <span style="color:var(--sub); font-weight:400;">(과잉발달 후보)</span></h4>
+        <table id="tableOver"><thead><tr><th>역명</th><th>일평균승하차</th><th>실제 상가수</th><th>예측 상가수</th><th>차이</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 데이터 한계 -->
+  <section>
+    <div class="sec-head">
+      <span class="sec-tag">솔직한 데이터 한계</span>
+      <h2>이번 분석에서 하지 못한 것들</h2>
+    </div>
+    <div class="limits">
+      <h3>⚠ 원래 계획했지만 데이터가 없어 다르게 처리한 부분</h3>
+      <ul>
+        <li><b>"거품 상권"(유동인구는 적은데 임대료만 비싼 곳)</b> — 실제 임대료 데이터가 없어서, 대신 "유동인구 대비 상가 수가 과도하게 많은 역"을 과잉발달 후보로 표시했습니다. 임대료와 상가 수는 다른 지표이기 때문에, 이건 정확한 "거품 상권" 판정이 아니라 근사치입니다.</li>
+        <li><b>신규 역 개통 전후 자연실험 분석</b> — 역 개통일, 개통 전후 창업률·폐업률·임대료 변화 시계열 데이터가 없어서 진행하지 못했습니다. 이 분석을 하려면 개통일 정보와 개통 전/후 여러 시점의 상권 데이터가 추가로 필요합니다.</li>
+        <li><b>시간대 패턴</b>은 24시간 전체가 아니라 출근(07-09시)·퇴근(18-20시) 구간만 제공되어, 이 두 구간과 평일/주말 비율로 "출퇴근형·관광형·주거형"을 근사해서 구분했습니다.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    데이터 출처: 소상공인시장진흥공단 상가(상권)정보_부산 · 부산교통공사 도시철도역사정보 · 부산지하철 2호선 시간대별 승하차 데이터(2026 상반기)<br>
+    분석·제작: 김동윤 · 정보영재원 탐구활동
+  </footer>
+</div>
+
+<script>
+const STATION_DATA = [{"역번호": 219, "역명": "서면", "일평균승하차": 51418, "상가수_300m": 2641, "상가수_500m": 6042, "상가수_합계": 8683, "오피스수_합계": 863, "출퇴근피크비율": 0.2711, "저녁피크비율": 0.194, "아침피크비율": 0.0771, "주말평일비": 0.9984, "오피스밀도_비율": 16.784, "잔차": 3789.2209, "상가수_예측": 4893.7791, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(1913), 소매(1876), 수리·개인(709)"}, {"역번호": 227, "역명": "사상", "일평균승하차": 46549, "상가수_300m": 178, "상가수_500m": 762, "상가수_합계": 940, "오피스수_합계": 175, "출퇴근피크비율": 0.3251, "저녁피크비율": 0.1925, "아침피크비율": 0.1326, "주말평일비": 0.9791, "오피스밀도_비율": 3.7595, "잔차": -3474.4127, "상가수_예측": 4414.4127, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(394), 소매(100), 수리·개인(84)"}, {"역번호": 206, "역명": "센텀시티", "일평균승하차": 42151, "상가수_300m": 986, "상가수_500m": 1742, "상가수_합계": 2728, "오피스수_합계": 430, "출퇴근피크비율": 0.3574, "저녁피크비율": 0.2358, "아침피크비율": 0.1216, "주말평일비": 1.1119, "오피스밀도_비율": 10.2014, "잔차": -1253.4176, "상가수_예측": 3981.4176, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "소매(613), 과학·기술(320), 음식(275)"}, {"역번호": 212, "역명": "경성대부경대", "일평균승하차": 33488, "상가수_300m": 1361, "상가수_500m": 1933, "상가수_합계": 3294, "오피스수_합계": 557, "출퇴근피크비율": 0.329, "저녁피크비율": 0.1965, "아침피크비율": 0.1325, "주말평일비": 0.6327, "오피스밀도_비율": 16.6328, "잔차": 165.4785, "상가수_예측": 3128.5215, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(751), 소매(273), 수리·개인(231)"}, {"역번호": 203, "역명": "해운대", "일평균승하차": 31327, "상가수_300m": 770, "상가수_500m": 1742, "상가수_합계": 2512, "오피스수_합계": 333, "출퇴근피크비율": 0.2698, "저녁피크비율": 0.1745, "아침피크비율": 0.0952, "주말평일비": 1.1966, "오피스밀도_비율": 10.6298, "잔차": -403.7652, "상가수_예측": 2915.7652, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(695), 소매(342), 숙박(168)"}, {"역번호": 208, "역명": "수영", "일평균승하차": 31242, "상가수_300m": 984, "상가수_500m": 1671, "상가수_합계": 2655, "오피스수_합계": 264, "출퇴근피크비율": 0.3363, "저녁피크비율": 0.1904, "아침피크비율": 0.1458, "주말평일비": 0.7195, "오피스밀도_비율": 8.4502, "잔차": -252.3967, "상가수_예측": 2907.3967, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(681), 소매(357), 수리·개인(197)"}, {"역번호": 201, "역명": "장산", "일평균승하차": 30325, "상가수_300m": 1615, "상가수_500m": 2089, "상가수_합계": 3704, "오피스수_합계": 410, "출퇴근피크비율": 0.3354, "저녁피크비율": 0.1849, "아침피크비율": 0.1505, "주말평일비": 0.7736, "오피스밀도_비율": 13.5202, "잔차": 886.8845, "상가수_예측": 2817.1155, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(737), 소매(431), 수리·개인(272)"}, {"역번호": 209, "역명": "광안", "일평균승하차": 23826, "상가수_300m": 505, "상가수_500m": 1051, "상가수_합계": 1556, "오피스수_합계": 183, "출퇴근피크비율": 0.3234, "저녁피크비율": 0.1943, "아침피크비율": 0.1291, "주말평일비": 1.1222, "오피스밀도_비율": 7.6807, "잔차": -621.2712, "상가수_예측": 2177.2712, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(353), 소매(232), 수리·개인(174)"}, {"역번호": 205, "역명": "벡스코", "일평균승하차": 21705, "상가수_300m": 253, "상가수_500m": 402, "상가수_합계": 655, "오피스수_합계": 72, "출퇴근피크비율": 0.3239, "저녁피크비율": 0.1708, "아침피크비율": 0.1531, "주말평일비": 0.94, "오피스밀도_비율": 3.3172, "잔차": -1313.453, "상가수_예측": 1968.453, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(109), 소매(107), 수리·개인(42)"}, {"역번호": 235, "역명": "화명", "일평균승하차": 21585, "상가수_300m": 936, "상가수_500m": 1450, "상가수_합계": 2386, "오피스수_합계": 187, "출퇴근피크비율": 0.3412, "저녁피크비율": 0.1933, "아침피크비율": 0.1479, "주말평일비": 0.7054, "오피스밀도_비율": 8.6634, "잔차": 429.3614, "상가수_예측": 1956.6386, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(462), 소매(235), 수리·개인(217)"}, {"역번호": 218, "역명": "전포", "일평균승하차": 21343, "상가수_300m": 1018, "상가수_500m": 2381, "상가수_합계": 3399, "오피스수_합계": 386, "출퇴근피크비율": 0.3744, "저녁피크비율": 0.2418, "아침피크비율": 0.1326, "주말평일비": 1.0113, "오피스밀도_비율": 18.0856, "잔차": 1466.1869, "상가수_예측": 1932.8131, "cluster": 2, "cluster_name": "핵심상업·관광형", "상위업종_500m": "음식(956), 수리·개인(444), 소매(433)"}, {"역번호": 213, "역명": "대연", "일평균승하차": 20127, "상가수_300m": 753, "상가수_500m": 1499, "상가수_합계": 2252, "오피스수_합계": 236, "출퇴근피크비율": 0.3402, "저녁피크비율": 0.1916, "아침피크비율": 0.1486, "주말평일비": 0.7477, "오피스밀도_비율": 11.7255, "잔차": 438.9054, "상가수_예측": 1813.0946, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(549), 소매(340), 수리·개인(189)"}, {"역번호": 210, "역명": "금련산", "일평균승하차": 17325, "상가수_300m": 448, "상가수_500m": 1272, "상가수_합계": 1720, "오피스수_합계": 217, "출퇴근피크비율": 0.3262, "저녁피크비율": 0.1914, "아침피크비율": 0.1349, "주말평일비": 0.9748, "오피스밀도_비율": 12.5253, "잔차": 182.77, "상가수_예측": 1537.23, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(491), 소매(223), 수리·개인(130)"}, {"역번호": 211, "역명": "남천", "일평균승하차": 16679, "상가수_300m": 632, "상가수_500m": 1232, "상가수_합계": 1864, "오피스수_합계": 282, "출퇴근피크비율": 0.3297, "저녁피크비율": 0.1887, "아침피크비율": 0.141, "주말평일비": 0.7317, "오피스밀도_비율": 16.9075, "잔차": 390.3705, "상가수_예측": 1473.6295, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(433), 소매(246), 교육(134)"}, {"역번호": 223, "역명": "개금", "일평균승하차": 16531, "상가수_300m": 365, "상가수_500m": 998, "상가수_합계": 1363, "오피스수_합계": 107, "출퇴근피크비율": 0.3477, "저녁피크비율": 0.1767, "아침피크비율": 0.1709, "주말평일비": 0.6057, "오피스밀도_비율": 6.4727, "잔차": -96.0585, "상가수_예측": 1459.0585, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(362), 소매(253), 수리·개인(132)"}, {"역번호": 202, "역명": "중동", "일평균승하차": 16148, "상가수_300m": 496, "상가수_500m": 820, "상가수_합계": 1316, "오피스수_합계": 222, "출퇴근피크비율": 0.3269, "저녁피크비율": 0.1776, "아침피크비율": 0.1493, "주말평일비": 0.8107, "오피스밀도_비율": 13.7478, "잔차": -105.3511, "상가수_예측": 1421.3511, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(207), 소매(177), 수리·개인(141)"}, {"역번호": 204, "역명": "동백", "일평균승하차": 14291, "상가수_300m": 89, "상가수_500m": 543, "상가수_합계": 632, "오피스수_합계": 114, "출퇴근피크비율": 0.3417, "저녁피크비율": 0.1908, "아침피크비율": 0.151, "주말평일비": 0.7975, "오피스밀도_비율": 7.977, "잔차": -606.5244, "상가수_예측": 1238.5244, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(126), 소매(110), 수리·개인(83)"}, {"역번호": 225, "역명": "주례", "일평균승하차": 13763, "상가수_300m": 329, "상가수_500m": 603, "상가수_합계": 932, "오피스수_합계": 62, "출퇴근피크비율": 0.3572, "저녁피크비율": 0.1873, "아침피크비율": 0.1699, "주말평일비": 0.6456, "오피스밀도_비율": 4.5048, "잔차": -254.5414, "상가수_예측": 1186.5414, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(209), 소매(153), 수리·개인(101)"}, {"역번호": 222, "역명": "동의대", "일평균승하차": 12926, "상가수_300m": 159, "상가수_500m": 511, "상가수_합계": 670, "오피스수_합계": 93, "출퇴근피크비율": 0.3015, "저녁피크비율": 0.1507, "아침피크비율": 0.1507, "주말평일비": 0.5526, "오피스밀도_비율": 7.1948, "잔차": -434.1364, "상가수_예측": 1104.1364, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(168), 소매(123), 수리·개인(77)"}, {"역번호": 233, "역명": "덕천", "일평균승하차": 12580, "상가수_300m": 1045, "상가수_500m": 1791, "상가수_합계": 2836, "오피스수_합계": 102, "출퇴근피크비율": 0.2726, "저녁피크비율": 0.1508, "아침피크비율": 0.1218, "주말평일비": 0.816, "오피스밀도_비율": 8.1081, "잔차": 1765.9282, "상가수_예측": 1070.0718, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(760), 소매(600), 수리·개인(168)"}, {"역번호": 220, "역명": "부암", "일평균승하차": 12345, "상가수_300m": 245, "상가수_500m": 741, "상가수_합계": 986, "오피스수_합계": 136, "출퇴근피크비율": 0.3864, "저녁피크비율": 0.186, "아침피크비율": 0.2004, "주말평일비": 0.6766, "오피스밀도_비율": 11.0166, "잔차": -60.9354, "상가수_예측": 1046.9354, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(225), 소매(152), 수리·개인(107)"}, {"역번호": 234, "역명": "수정", "일평균승하차": 12073, "상가수_300m": 224, "상가수_500m": 384, "상가수_합계": 608, "오피스수_합계": 64, "출퇴근피크비율": 0.3785, "저녁피크비율": 0.193, "아침피크비율": 0.1855, "주말평일비": 0.6825, "오피스밀도_비율": 5.3011, "잔차": -412.1562, "상가수_예측": 1020.1562, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(125), 소매(76), 수리·개인(52)"}, {"역번호": 224, "역명": "냉정", "일평균승하차": 11579, "상가수_300m": 397, "상가수_500m": 678, "상가수_합계": 1075, "오피스수_합계": 115, "출퇴근피크비율": 0.3227, "저녁피크비율": 0.1678, "아침피크비율": 0.1549, "주말평일비": 0.5889, "오피스밀도_비율": 9.9318, "잔차": 103.4794, "상가수_예측": 971.5206, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(243), 소매(133), 수리·개인(117)"}, {"역번호": 243, "역명": "양산", "일평균승하차": 11569, "상가수_300m": 0, "상가수_500m": 0, "상가수_합계": 0, "오피스수_합계": 0, "출퇴근피크비율": 0.3123, "저녁피크비율": 0.1609, "아침피크비율": 0.1514, "주말평일비": 0.8563, "오피스밀도_비율": 0.0, "잔차": -970.5361, "상가수_예측": 970.5361, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": NaN}, {"역번호": 217, "역명": "국제금융센터부산은행", "일평균승하차": 10395, "상가수_300m": 333, "상가수_500m": 672, "상가수_합계": 1005, "오피스수_합계": 202, "출퇴근피크비율": 0.5841, "저녁피크비율": 0.3169, "아침피크비율": 0.2673, "주말평일비": 0.4979, "오피스밀도_비율": 19.4324, "잔차": 150.0474, "상가수_예측": 854.9526, "cluster": 1, "cluster_name": "출퇴근-오피스형", "상위업종_500m": "음식(244), 소매(155), 수리·개인(90)"}, {"역번호": 214, "역명": "못골", "일평균승하차": 10394, "상가수_300m": 231, "상가수_500m": 750, "상가수_합계": 981, "오피스수_합계": 169, "출퇴근피크비율": 0.3868, "저녁피크비율": 0.203, "아침피크비율": 0.1838, "주말평일비": 0.6755, "오피스밀도_비율": 16.2594, "잔차": 126.1459, "상가수_예측": 854.8541, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(223), 소매(170), 수리·개인(105)"}, {"역번호": 216, "역명": "문현", "일평균승하차": 10147, "상가수_300m": 219, "상가수_500m": 910, "상가수_합계": 1129, "오피스수_합계": 198, "출퇴근피크비율": 0.413, "저녁피크비율": 0.2277, "아침피크비율": 0.1853, "주말평일비": 0.7841, "오피스밀도_비율": 19.5132, "잔차": 298.4637, "상가수_예측": 830.5363, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(284), 소매(212), 과학·기술(113)"}, {"역번호": 228, "역명": "덕포", "일평균승하차": 9436, "상가수_300m": 325, "상가수_500m": 794, "상가수_합계": 1119, "오피스수_합계": 88, "출퇴근피크비율": 0.3678, "저녁피크비율": 0.1818, "아침피크비율": 0.186, "주말평일비": 0.6157, "오피스밀도_비율": 9.326, "잔차": 358.4636, "상가수_예측": 760.5364, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(308), 소매(225), 수리·개인(111)"}, {"역번호": 240, "역명": "증산", "일평균승하차": 9265, "상가수_300m": 0, "상가수_500m": 0, "상가수_합계": 0, "오피스수_합계": 0, "출퇴근피크비율": 0.3449, "저녁피크비율": 0.1873, "아침피크비율": 0.1576, "주말평일비": 0.8308, "오피스밀도_비율": 0.0, "잔차": -743.701, "상가수_예측": 743.701, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": NaN}, {"역번호": 230, "역명": "모라", "일평균승하차": 9218, "상가수_300m": 377, "상가수_500m": 837, "상가수_합계": 1214, "오피스수_합계": 102, "출퇴근피크비율": 0.3705, "저녁피크비율": 0.1873, "아침피크비율": 0.1832, "주말평일비": 0.6495, "오피스밀도_비율": 11.0653, "잔차": 474.9263, "상가수_예측": 739.0737, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(328), 소매(193), 수리·개인(132)"}, {"역번호": 236, "역명": "율리", "일평균승하차": 8751, "상가수_300m": 90, "상가수_500m": 203, "상가수_합계": 293, "오피스수_합계": 40, "출퇴근피크비율": 0.3569, "저녁피크비율": 0.1739, "아침피크비율": 0.183, "주말평일비": 0.726, "오피스밀도_비율": 4.5709, "잔차": -400.0963, "상가수_예측": 693.0963, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(68), 소매(52), 수리·개인(31)"}, {"역번호": 231, "역명": "구남", "일평균승하차": 8643, "상가수_300m": 247, "상가수_500m": 480, "상가수_합계": 727, "오피스수_합계": 84, "출퇴근피크비율": 0.3463, "저녁피크비율": 0.1719, "아침피크비율": 0.1744, "주말평일비": 0.703, "오피스밀도_비율": 9.7188, "잔차": 44.5366, "상가수_예측": 682.4634, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(140), 소매(123), 수리·개인(83)"}, {"역번호": 226, "역명": "감전", "일평균승하차": 7926, "상가수_300m": 231, "상가수_500m": 525, "상가수_합계": 756, "오피스수_합계": 314, "출퇴근피크비율": 0.4764, "저녁피크비율": 0.2414, "아침피크비율": 0.235, "주말평일비": 0.4616, "오피스밀도_비율": 39.6165, "잔차": 144.1272, "상가수_예측": 611.8728, "cluster": 1, "cluster_name": "출퇴근-오피스형", "상위업종_500m": "과학·기술(192), 음식(102), 소매(79)"}, {"역번호": 207, "역명": "민락", "일평균승하차": 7342, "상가수_300m": 262, "상가수_500m": 778, "상가수_합계": 1040, "오피스수_합계": 172, "출퇴근피크비율": 0.3573, "저녁피크비율": 0.1927, "아침피크비율": 0.1646, "주말평일비": 0.7603, "오피스밀도_비율": 23.4269, "잔차": 485.6236, "상가수_예측": 554.3764, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(321), 소매(118), 수리·개인(98)"}, {"역번호": 221, "역명": "가야", "일평균승하차": 7209, "상가수_300m": 148, "상가수_500m": 281, "상가수_합계": 429, "오피스수_합계": 44, "출퇴근피크비율": 0.3655, "저녁피크비율": 0.1899, "아침피크비율": 0.1755, "주말평일비": 0.7184, "오피스밀도_비율": 6.1035, "잔차": -112.2821, "상가수_예측": 541.2821, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(76), 소매(63), 수리·개인(58)"}, {"역번호": 242, "역명": "남양산", "일평균승하차": 6584, "상가수_300m": 0, "상가수_500m": 0, "상가수_합계": 0, "오피스수_합계": 0, "출퇴근피크비율": 0.3458, "저녁피크비율": 0.173, "아침피크비율": 0.1728, "주말평일비": 0.8188, "오피스밀도_비율": 0.0, "잔차": -479.7492, "상가수_예측": 479.7492, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": NaN}, {"역번호": 232, "역명": "구명", "일평균승하차": 6368, "상가수_300m": 124, "상가수_500m": 560, "상가수_합계": 684, "오피스수_합계": 68, "출퇴근피크비율": 0.3441, "저녁피크비율": 0.1591, "아침피크비율": 0.185, "주말평일비": 0.6773, "오피스밀도_비율": 10.6784, "잔차": 225.5166, "상가수_예측": 458.4834, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(175), 소매(122), 수리·개인(84)"}, {"역번호": 215, "역명": "지게골", "일평균승하차": 5715, "상가수_300m": 161, "상가수_500m": 400, "상가수_합계": 561, "오피스수_합계": 59, "출퇴근피크비율": 0.366, "저녁피크비율": 0.1799, "아침피크비율": 0.1861, "주말평일비": 0.6525, "오피스밀도_비율": 10.3237, "잔차": 166.8062, "상가수_예측": 394.1938, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(148), 소매(94), 수리·개인(61)"}, {"역번호": 238, "역명": "금곡", "일평균승하차": 4574, "상가수_300m": 122, "상가수_500m": 253, "상가수_합계": 375, "오피스수_합계": 36, "출퇴근피크비율": 0.3329, "저녁피크비율": 0.1516, "아침피크비율": 0.1814, "주말평일비": 0.7013, "오피스밀도_비율": 7.8706, "잔차": 93.1408, "상가수_예측": 281.8592, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(78), 소매(61), 수리·개인(45)"}, {"역번호": 229, "역명": "모덕", "일평균승하차": 3827, "상가수_300m": 97, "상가수_500m": 214, "상가수_합계": 311, "오피스수_합계": 69, "출퇴근피크비율": 0.5171, "저녁피크비율": 0.2244, "아침피크비율": 0.2927, "주말평일비": 0.3079, "오피스밀도_비율": 18.0298, "잔차": 102.685, "상가수_예측": 208.315, "cluster": 1, "cluster_name": "출퇴근-오피스형", "상위업종_500m": "음식(46), 소매(46), 수리·개인(43)"}, {"역번호": 241, "역명": "부산대양산캠퍼스", "일평균승하차": 3452, "상가수_300m": 0, "상가수_500m": 0, "상가수_합계": 0, "오피스수_합계": 0, "출퇴근피크비율": 0.3349, "저녁피크비율": 0.1404, "아침피크비율": 0.1945, "주말평일비": 0.495, "오피스밀도_비율": 0.0, "잔차": -171.3952, "상가수_예측": 171.3952, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": NaN}, {"역번호": 237, "역명": "동원", "일평균승하차": 2972, "상가수_300m": 25, "상가수_500m": 55, "상가수_합계": 80, "오피스수_합계": 7, "출퇴근피크비율": 0.3199, "저녁피크비율": 0.154, "아침피크비율": 0.1659, "주말평일비": 0.7038, "오피스밀도_비율": 2.3553, "잔차": -44.1379, "상가수_예측": 124.1379, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": "음식(16), 소매(13), 수리·개인(13)"}, {"역번호": 239, "역명": "호포", "일평균승하차": 2511, "상가수_300m": 0, "상가수_500m": 0, "상가수_합계": 0, "오피스수_합계": 0, "출퇴근피크비율": 0.3443, "저녁피크비율": 0.1734, "아침피크비율": 0.1709, "주말평일비": 0.9678, "오피스밀도_비율": 0.0, "잔차": -78.7512, "상가수_예측": 78.7512, "cluster": 0, "cluster_name": "주거형", "상위업종_500m": NaN}];
+const SUMMARY = {"n_stations": 43, "r_h1": 0.761, "r_h2_raw": -0.117, "r_h2_density": 0.487, "r2_reg": 0.579};
+
+const fmt = n => Math.round(n).toLocaleString('ko-KR');
+const fmt1 = n => (Math.round(n*10)/10).toLocaleString('ko-KR');
+
+const score1 = Math.round(SUMMARY.r_h1*100);
+const score2raw = Math.round(SUMMARY.r_h2_raw*100);
+const score2density = Math.round(SUMMARY.r_h2_density*100);
+const scorePct = Math.round(SUMMARY.r2_reg*100);
+
+document.getElementById('stat-r1').textContent = score1 + '점';
+document.getElementById('stat-r2').textContent = score2density + '점';
+document.getElementById('r1-big').textContent = score1 + '점 / 100점';
+document.getElementById('r2score-big').textContent = scorePct + '%';
+document.getElementById('r2raw-big').textContent = score2raw + '점 / 100점';
+document.getElementById('r2density-big').textContent = score2density + '점 / 100점';
+
+document.getElementById('verdict-h1').textContent =
+  '✓ 가설 1 맞음: 관련성 점수 ' + score1 + '점으로 매우 강하게 관련있어요. 승하차 인원이 많을수록 상가 수도 많아지는 게 확인됐어요.';
+
+document.getElementById('verdict-h2').textContent =
+  '△ 가설 2 부분적으로 맞음: 그냥 오피스 개수(' + score2raw + '점)로는 관련이 안 보였지만, 승객 수 대비 공평하게 비교(' + score2density + '점)하니 뚜렷하게 관련있었어요. "역이 크면 다 많다"가 아니라, 승객 규모 대비 오피스가 밀집된 역일수록 출퇴근에 사람이 더 몰렸어요.';
+
+// ---------- 가설1: 산점도 + 회귀선 ----------
+const h1points = STATION_DATA.map(d => ({x:d['일평균승하차'], y:d['상가수_합계'], label:d['역명']}));
+const xs = h1points.map(p=>p.x);
+const minX = Math.min(...xs), maxX = Math.max(...xs);
+// 간단 선형회귀 재계산 (표시용)
+const n = h1points.length;
+const sumX = xs.reduce((a,b)=>a+b,0);
+const ys = h1points.map(p=>p.y);
+const sumY = ys.reduce((a,b)=>a+b,0);
+const sumXY = h1points.reduce((a,p)=>a+p.x*p.y,0);
+const sumX2 = xs.reduce((a,x)=>a+x*x,0);
+const slope = (n*sumXY - sumX*sumY)/(n*sumX2 - sumX*sumX);
+const intercept = (sumY - slope*sumX)/n;
+
+const chartH1Instance = new Chart(document.getElementById('chartH1'), {
+  type:'scatter',
+  data:{ datasets:[
+    {label:'역', data:h1points, backgroundColor:'#5f8a12', pointRadius:5},
+    {label:'예상선', data:[{x:minX,y:slope*minX+intercept},{x:maxX,y:slope*maxX+intercept}], type:'line', borderColor:'#e07a3f', borderWidth:2, pointRadius:0, borderDash:[6,4]},
+    {label:'선택한 역', data:[], backgroundColor:'#c0392b', pointRadius:9, pointStyle:'star', borderColor:'#fff', borderWidth:1}
+  ]},
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ tooltip:{ callbacks:{ label: c => c.raw.label ? `${c.raw.label}: 승하차 ${fmt(c.raw.x)}명, 상가 ${fmt(c.raw.y)}개` : '' } }, legend:{display:false} },
+    scales:{ x:{title:{display:true,text:'일평균 승하차 인원(명)'}}, y:{title:{display:true,text:'상가 수 (300m+500m)'}} }
+  }
+});
+
+// ---------- 가설2: 산점도 (출퇴근피크비율 vs 오피스밀도) ----------
+const h2points = STATION_DATA.map(d => ({x:d['출퇴근피크비율'], y:d['오피스밀도_비율'], label:d['역명']}));
+new Chart(document.getElementById('chartH2'), {
+  type:'scatter',
+  data:{ datasets:[{label:'역', data:h2points, backgroundColor:'#5f8a12', pointRadius:5}] },
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ tooltip:{ callbacks:{ label: c => `${c.raw.label}: 출퇴근비율 ${(c.raw.x*100).toFixed(1)}%, 오피스밀도 ${fmt1(c.raw.y)}` } }, legend:{display:false} },
+    scales:{ x:{title:{display:true,text:'평일 출퇴근 피크비율'}}, y:{title:{display:true,text:'승객 1,000명당 오피스 수'}} }
+  }
+});
+
+// ---------- 클러스터 산점도 ----------
+const clusterColor = {2:'#8FC31F', 1:'#e07a3f', 0:'#7a8ea8'};
+const clusterName = {2:'핵심상업·관광형', 1:'출퇴근-오피스형', 0:'주거형'};
+const clusterDatasets = [0,1,2].map(c => ({
+  label: clusterName[c],
+  data: STATION_DATA.filter(d=>d.cluster===c).map(d=>({x:d['주말평일비'], y:d['오피스수_합계'], r:Math.max(4,Math.sqrt(d['일평균승하차'])/9), label:d['역명']})),
+  backgroundColor: clusterColor[c]+'cc'
+}));
+const chartClusterInstance = new Chart(document.getElementById('chartCluster'), {
+  type:'bubble',
+  data:{ datasets: [...clusterDatasets, {label:'선택한 역', data:[], backgroundColor:'#c0392b', borderColor:'#fff', borderWidth:2}] },
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ tooltip:{ callbacks:{ label: c => `${c.raw.label} (${c.dataset.label})` } } },
+    scales:{ x:{title:{display:true,text:'주말/평일 승하차 비율 (1에 가까울수록 요일무관 이용)'}}, y:{title:{display:true,text:'오피스·회사 수'}} }
+  }
+});
+
+// ---------- 클러스터 카드 ----------
+const clusterDesc = {
+  2: '평균 승하차 34,630명 · 주말/평일비 0.95 → 주말에도 사람이 몰리는 상업·관광 거점',
+  1: '평균 승하차 7,383명 · 출퇴근피크비율 52.6%, 주말/평일비 0.42 → 평일 출퇴근에 집중되고 오피스 밀도가 매우 높음',
+  0: '평균 승하차 11,091명 · 나머지 대다수 역 → 오피스·상가 밀도가 낮고 승하차 규모도 중소형, 주거지 성격'
+};
+const cardsHtml = [2,1,0].map(c=>{
+  const stations = STATION_DATA.filter(d=>d.cluster===c).map(d=>d['역명']);
+  return `<div class="cluster-card">
+    <h4><span class="dot" style="background:${clusterColor[c]}"></span> ${clusterName[c]}</h4>
+    <div class="n">${stations.length}개 역</div>
+    <div class="method-note" style="margin-bottom:8px;">${clusterDesc[c]}</div>
+    <div class="stations">${stations.join(', ')}</div>
+  </div>`;
+}).join('');
+document.getElementById('clusterCards').innerHTML = cardsHtml;
+
+// ---------- 저평가/과잉 테이블 ----------
+function fillTable(id, rows){
+  const tbody = document.querySelector('#'+id+' tbody');
+  tbody.innerHTML = rows.map(d => `<tr>
+    <td>${d['역명']}</td>
+    <td>${fmt(d['일평균승하차'])}</td>
+    <td>${fmt(d['상가수_합계'])}</td>
+    <td>${fmt(d['상가수_예측'])}</td>
+    <td class="${d['잔차']<0?'neg':'pos'}">${d['잔차']>0?'+':''}${fmt(d['잔차'])}</td>
+  </tr>`).join('');
+}
+const sorted = [...STATION_DATA].sort((a,b)=>a['잔차']-b['잔차']);
+fillTable('tableUnder', sorted.slice(0,8));
+fillTable('tableOver', [...sorted].reverse().slice(0,8));
+
+// ---------- 체험존: 가상 유동인구 시뮬레이터 ----------
+const chartSimInstance = new Chart(document.getElementById('chartSim'), {
+  type:'scatter',
+  data:{ datasets:[
+    {label:'실제 43개 역', data:h1points, backgroundColor:'#b7c9a8', pointRadius:4},
+    {label:'예상선', data:[{x:minX,y:slope*minX+intercept},{x:maxX,y:slope*maxX+intercept}], type:'line', borderColor:'#e07a3f', borderWidth:2, pointRadius:0, borderDash:[6,4]},
+    {label:'내가 정한 유동인구', data:[{x:20000, y:slope*20000+intercept}], backgroundColor:'#c0392b', pointRadius:10, pointStyle:'rectRot'}
+  ]},
+  options:{ responsive:true, maintainAspectRatio:false,
+    animation:{duration:250},
+    plugins:{ tooltip:{ callbacks:{ label: c => c.raw.label ? `${c.raw.label}: 승하차 ${fmt(c.raw.x)}명, 상가 ${fmt(c.raw.y)}개` : `내가 정한 값: 승하차 ${fmt(c.raw.x)}명 → 예측 상가 ${fmt(c.raw.y)}개` } }, legend:{position:'bottom'} },
+    scales:{ x:{title:{display:true,text:'일평균 승하차 인원(명)'}}, y:{title:{display:true,text:'상가 수 (300m+500m)'}} }
+  }
+});
+
+function findNearestStation(x){
+  let best=null, bestDist=Infinity;
+  STATION_DATA.forEach(d=>{
+    const dist = Math.abs(d['일평균승하차']-x);
+    if(dist<bestDist){bestDist=dist; best=d;}
+  });
+  return best;
+}
+
+function updateSimulator(val){
+  const x = Number(val);
+  const predicted = slope*x + intercept;
+  document.getElementById('simLabel').textContent = fmt(x);
+  document.getElementById('simPredicted').textContent = fmt(predicted) + '개';
+  const nearest = findNearestStation(x);
+  document.getElementById('simCompare').innerHTML =
+    `가장 비슷한 실제 역은 <b>${nearest['역명']}역</b>(승하차 ${fmt(nearest['일평균승하차'])}명, 실제 상가 ${fmt(nearest['상가수_합계'])}개)이에요.`;
+  chartSimInstance.data.datasets[2].data = [{x:x, y:predicted}];
+  chartSimInstance.update('none');
+}
+document.getElementById('simSlider').addEventListener('input', e => updateSimulator(e.target.value));
+updateSimulator(20000);
+
+// ---------- 체험존: 역 탐색기 ----------
+const picker = document.getElementById('stationPicker');
+const sortedByName = [...STATION_DATA].sort((a,b)=> b['일평균승하차']-a['일평균승하차']);
+picker.innerHTML = sortedByName.map(d => `<option value="${d['역명']}">${d['역명']} (승하차 ${fmt(d['일평균승하차'])}명)</option>`).join('');
+
+function showStation(name){
+  const d = STATION_DATA.find(s=>s['역명']===name);
+  if(!d) return;
+  const janchaSign = d['잔차']<0 ? '부족 (저평가 후보)' : '과다 (과잉발달 후보)';
+  document.getElementById('stationDetail').innerHTML = `
+    <div style="padding:12px 14px; background:#f2f3ee; border-radius:10px;">
+      <div style="font-weight:700; font-size:15px; margin-bottom:6px;">
+        <span class="dot" style="background:${clusterColor[d.cluster]}"></span> ${d['역명']}역 — ${clusterName[d.cluster]}
+      </div>
+      일평균 승하차: <b>${fmt(d['일평균승하차'])}명</b><br>
+      상가 수(300m+500m): <b>${fmt(d['상가수_합계'])}개</b> (예측 ${fmt(d['상가수_예측'])}개, ${janchaSign})<br>
+      출퇴근 피크비율: <b>${(d['출퇴근피크비율']*100).toFixed(1)}%</b> · 주말/평일비: <b>${d['주말평일비'].toFixed(2)}</b><br>
+      오피스·회사 수: <b>${fmt(d['오피스수_합계'])}개</b><br>
+      주요 업종: ${d['상위업종_500m']}
+    </div>`;
+  // 차트 하이라이트
+  chartH1Instance.data.datasets[2].data = [{x:d['일평균승하차'], y:d['상가수_합계'], label:d['역명']}];
+  chartH1Instance.update('none');
+  chartClusterInstance.data.datasets[3].data = [{x:d['주말평일비'], y:d['오피스수_합계'], r:10, label:d['역명']}];
+  chartClusterInstance.update('none');
+  // 슬라이더도 같이 이동
+  document.getElementById('simSlider').value = d['일평균승하차'];
+  updateSimulator(d['일평균승하차']);
+}
+picker.addEventListener('change', e => showStation(e.target.value));
+showStation(sortedByName[0]['역명']);
+</script>
+</body>
+</html>
